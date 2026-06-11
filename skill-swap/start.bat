@@ -27,8 +27,8 @@ cd ..
 echo.
 echo ========================================
 echo 启动完成！
-echo 后端服务: http://localhost:3000
-echo 前端服务: http://localhost:5173
+echo 后端服务: http://localhost:4126
+echo 前端服务: http://localhost:5526
 echo ========================================
 echo.
 pause

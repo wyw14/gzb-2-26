@@ -7,7 +7,7 @@ const { readJson, writeJson } = require('./utils/storage');
 const { findMatchesForUser } = require('./utils/matching');
 
 const app = express();
-const PORT = 3000;
+const PORT = 4126;
 const JWT_SECRET = 'skill-swap-secret-key-2024';
 
 app.use(cors());
@@ -125,7 +125,7 @@ app.put('/api/users/profile', authMiddleware, (req, res) => {
 
 app.get('/api/skills', authMiddleware, (req, res) => {
   const skills = readJson('skills.json');
-  const { category, type, userId } = req.query;
+  const { category, type, userId, status, startDate, endDate, sortBy } = req.query;
   let filtered = skills;
 
   if (category) {
@@ -136,6 +136,21 @@ app.get('/api/skills', authMiddleware, (req, res) => {
   }
   if (userId) {
     filtered = filtered.filter(s => s.userId === userId);
+  }
+  if (status) {
+    filtered = filtered.filter(s => (s.status || 'active') === status);
+  }
+  if (startDate) {
+    filtered = filtered.filter(s => new Date(s.createdAt) >= new Date(startDate));
+  }
+  if (endDate) {
+    filtered = filtered.filter(s => new Date(s.createdAt) <= new Date(endDate));
+  }
+
+  if (sortBy === 'createdAt_desc') {
+    filtered = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  } else if (sortBy === 'createdAt_asc') {
+    filtered = filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   }
 
   res.json(filtered);
@@ -156,6 +171,7 @@ app.post('/api/skills', authMiddleware, (req, res) => {
     id: uuidv4(),
     userId: req.user.id,
     ...req.body,
+    status: 'active',
     createdAt: new Date().toISOString()
   };
   skills.push(newSkill);
@@ -185,9 +201,72 @@ app.delete('/api/skills/:id', authMiddleware, (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/skills/batch/update-status', authMiddleware, (req, res) => {
+  const { ids, status } = req.body;
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: '请选择要操作的技能' });
+  }
+  if (!['active', 'inactive'].includes(status)) {
+    return res.status(400).json({ error: '状态无效' });
+  }
+
+  const skills = readJson('skills.json');
+  let updatedCount = 0;
+
+  skills.forEach(skill => {
+    if (ids.includes(skill.id) && skill.userId === req.user.id) {
+      skill.status = status;
+      updatedCount++;
+    }
+  });
+
+  writeJson('skills.json', skills);
+  res.json({ success: true, updatedCount });
+});
+
+app.post('/api/skills/batch/delete', authMiddleware, (req, res) => {
+  const { ids } = req.body;
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: '请选择要删除的技能' });
+  }
+
+  const skills = readJson('skills.json');
+  const filtered = skills.filter(s => !(ids.includes(s.id) && s.userId === req.user.id));
+  const deletedCount = skills.length - filtered.length;
+
+  writeJson('skills.json', filtered);
+  res.json({ success: true, deletedCount });
+});
+
+app.post('/api/skills/batch/change-category', authMiddleware, (req, res) => {
+  const { ids, category } = req.body;
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: '请选择要操作的技能' });
+  }
+  if (!category) {
+    return res.status(400).json({ error: '请选择分类' });
+  }
+
+  const skills = readJson('skills.json');
+  let updatedCount = 0;
+
+  skills.forEach(skill => {
+    if (ids.includes(skill.id) && skill.userId === req.user.id) {
+      skill.category = category;
+      updatedCount++;
+    }
+  });
+
+  writeJson('skills.json', skills);
+  res.json({ success: true, updatedCount });
+});
+
 app.get('/api/matches', authMiddleware, (req, res) => {
   const users = readJson('users.json');
-  const skills = readJson('skills.json');
+  const skills = readJson('skills.json').filter(s => (s.status || 'active') === 'active');
   const { minScore, category } = req.query;
 
   let matches = findMatchesForUser(req.user.id, users, skills);
@@ -413,7 +492,7 @@ app.get('/api/reviews/:userId', (req, res) => {
 });
 
 app.get('/api/stats/popular-skills', (req, res) => {
-  const skills = readJson('skills.json');
+  const skills = readJson('skills.json').filter(s => (s.status || 'active') === 'active');
   const skillCount = {};
 
   skills.forEach(s => {
@@ -443,7 +522,7 @@ app.get('/api/stats/success-rate', (req, res) => {
   const completed = exchanges.filter(e => e.status === 'completed').length;
   const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  const skills = readJson('skills.json');
+  const skills = readJson('skills.json').filter(s => (s.status || 'active') === 'active');
   const users = readJson('users.json');
 
   res.json({
@@ -468,11 +547,24 @@ app.get('/api/users/:userId', (req, res) => {
     return res.status(404).json({ error: '用户不存在' });
   }
 
+  const token = req.headers.authorization?.split(' ')[1];
+  let isOwner = false;
+  try {
+    if (token) {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      isOwner = decoded.id === req.params.userId;
+    }
+  } catch (e) {}
+
   const { password: _, ...userWithoutPassword } = user;
-  const userSkills = skills.filter(s => s.userId === req.params.userId);
+  let userSkills = skills.filter(s => s.userId === req.params.userId);
+  if (!isOwner) {
+    userSkills = userSkills.filter(s => (s.status || 'active') === 'active');
+  }
   res.json({
     ...userWithoutPassword,
-    skills: userSkills
+    skills: userSkills,
+    isOwner
   });
 });
 
@@ -505,7 +597,7 @@ app.get('/api/users', authMiddleware, (req, res) => {
     );
   }
   if (skill) {
-    const skills = readJson('skills.json');
+    const skills = readJson('skills.json').filter(s => (s.status || 'active') === 'active');
     const userIdsWithSkill = skills
       .filter(s => s.name.includes(skill))
       .map(s => s.userId);

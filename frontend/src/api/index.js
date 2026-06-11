@@ -39,7 +39,10 @@ export const skillAPI = {
   createSkill: (data) => api.post('/skills', data),
   updateSkill: (id, data) => api.put(`/skills/${id}`, data),
   deleteSkill: (id) => api.delete(`/skills/${id}`),
-  getCategories: () => api.get('/skill-categories')
+  getCategories: () => api.get('/skill-categories'),
+  batchUpdateStatus: (ids, status) => api.post('/skills/batch/update-status', { ids, status }),
+  batchDelete: (ids) => api.post('/skills/batch/delete', { ids }),
+  batchChangeCategory: (ids, category) => api.post('/skills/batch/change-category', { ids, category })
 }
 
 export const matchAPI = {

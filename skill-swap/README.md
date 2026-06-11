@@ -94,7 +94,7 @@ npm install
 npm start
 ```
 
-后端服务将在 http://localhost:3000 启动
+后端服务将在 http://localhost:4126 启动
 
 ### 2. 启动前端
 
@@ -104,11 +104,11 @@ npm install
 npm run dev
 ```
 
-前端开发服务器将在 http://localhost:5173 启动
+前端开发服务器将在 http://localhost:5526 启动
 
 ### 3. 访问应用
 
-打开浏览器访问 http://localhost:5173
+打开浏览器访问 http://localhost:5526
 
 ## API 接口说明
 
